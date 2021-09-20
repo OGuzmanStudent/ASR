@@ -16,7 +16,7 @@ print(f'>> B l o q u e:  {calculate_live_days()}')
 # 1) Segmentos recibidos, incluyendo los que se han recibido con errores.
 # 1) Datagramas entregados a usuarios UDP
 monitor = SNMPMonitor()
-menu_options = [" 1) ADD AN AGENT", " 2) REMOVE AGENT", " 3) LIST AGENTS", " 0) EXIT", ""]
+menu_options = [" 1) ADD AN AGENT", " 2) REMOVE AGENT", " 3) LIST AGENTS", " 4) EXPORT CURRENT AGENTS DATA", " 0) EXIT", ""]
 
 
 def evaluate_op(cop: int):
@@ -47,6 +47,11 @@ def evaluate_op(cop: int):
                     f">> ID: {agent.agent_id} <<- {agent.agent_ip_address}:{agent.port} SNMP-V{agent.snmp_version} ({agent.community_name})")
             if len(monitor.AGENTS) == 0:
                 print("> > 0  AGENTS < <")
+            print("TYPE ENTER TO CONTINUE")
+            input()
+        elif cop == 4:
+            file_name = monitor.export_current_data()
+            print(f"SESSION DATA DUMPED AS {file_name}")
     except:
         print(" > > E R R O R < <")
     return exit_monitor
