@@ -8,6 +8,9 @@ import time
 from sqlite3 import Error
 import threading
 from datetime import datetime
+import smtplib
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
 
 
 class SNMPObjectId():
@@ -325,12 +328,16 @@ def calculate_trend(agent_file_name: str):
                         "LINE2:tendencia#FFBB00")
 
 
-
 class SNMPMonitor:
     AGENTS: list[SNMPAgent] = []
     _sqlite_con = None
     _sqlite_cursor = None
     _stop_threads = False
+    mailsender = "dummycuenta3@gmail.com"
+    mailreceip = "dummycuenta3@gmail.com"
+    mailserver = 'smtp.gmail.com: 587'
+    password = 'Secreto123!'
+    subject = "Notificacion de sobrecarga"
 
     # >> S Q L I T E  ~ SECTION
     def _init_db(self):
@@ -387,6 +394,24 @@ class SNMPMonitor:
         while not self._stop_threads:
             for agent in self.AGENTS:
                 snmp_obj.update(agent)
+
+    def send_alert_attached(self, image_path: str):
+        """ Envía un correo electrónico adjuntando la imagen en IMG
+        """
+        msg = MIMEMultipart()
+        msg['Subject'] = self.subject
+        msg['From'] = self.mailsender
+        msg['To'] = self.mailreceip
+        fp = open(image_path, 'rb')
+        img = MIMEImage(fp.read())
+        fp.close()
+        msg.attach(img)
+        s = smtplib.SMTP(self.mailserver)
+        s.starttls()
+        # Login Credentials for sending the mail
+        s.login(self.mailsender, self.password)
+        s.sendmail(self.mailsender, self.mailreceip, msg.as_string())
+        s.quit()
 
     def remove_agent(self, agent_id: int):
         agent = next((agent for agent in self.AGENTS if agent.agent_id == agent_id))
