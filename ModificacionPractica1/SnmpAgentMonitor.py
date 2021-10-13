@@ -41,6 +41,25 @@ class SNMPObjectId():
     INTERFACE_TYPE = '1.3.6.1.2.1.2.2.1.3'
     INTERFACE_STATUS = '1.3.6.1.2.1.2.2.1.7'
 
+    # Host data
+    TOTAL_RAM_MEMORY_LINUX = 'iso.3.6.1.4.1.2021.4.5.0'
+    USED_RAM_MEMORY_LINUX = 'iso.3.6.1.4.1.2021.4.6.0'
+
+    TOTAL_RAM_MEMORY_WINBUS = "1.3.6.1.2.1.25.2.3.1.5.4"
+    USED_RAM_MEMORY_WINBUS = "1.3.6.1.2.1.25.2.3.1.6.4"
+    RAM_BUFFER_SIZE = "1.3.6.1.2.1.25.2.3.1.4.4"
+
+    PROCESSOR_USAGE_LINUX = "iso.3.6.1.2.1.25.3.3.1.2.196608"
+    PROCESSOR_USAGE_WINBUS = "iso.3.6.1.2.1.25.3.3.1.2.4"
+
+    TOTAL_DISK_WINDOWS = "iso.3.6.1.2.1.25.2.3.1.5.1"
+    DISK_BYTES_PER_UNIT_WINDOWS = "iso.3.6.1.2.1.25.2.3.1.5.1"
+    DISK_USAGE_WINDOWS = "iso.3.6.1.2.1.25.2.3.1.5.1"
+
+    TOTAL_DISK_LINUX = "iso.3.6.1.2.1.25.2.3.1.5.63"
+    DISK_BYTES_PER_UNIT_LINUX = "iso.3.6.1.2.1.25.2.3.1.4.63"
+    DISK_USAGE_LINUX = "iso.3.6.1.2.1.25.2.3.1.6.63"
+
 
 class InterfaceData:
     STATUS: str = ""
@@ -80,10 +99,19 @@ class SNMPAgent:
     agent_os_logo: str = ""
     agent_ports_number: str = ""
     agent_agent_name: str = ""
-    agent_agent_sys: str = ""
+    agent_agent_sys_type: str = ""
     agent_uptime: int = 0
     INTERFACES_NUMBER: int = 0
     INTERFACES: list[InterfaceData] = []
+    agent_cpu_usage: int = 0
+    agent_ram_total: int = 0
+    agent_ram_usage: int = 0
+    agent_ram_usage_percent: int = 0
+    agent_ram_bytes_per_unit: int = 0
+    agent_disk_total: int = 0
+    agent_disk_usage: int = 0
+    agent_disk_usage_percent: int = 0
+    agent_disk_bytes_per_unit: int = 0
 
     def __repr__(self):
         return {
@@ -100,7 +128,7 @@ class SNMPAgent:
             "agent_os_logo": self.agent_os_logo,
             "agent_ports_number": self.agent_ports_number,
             "agent_agent_name": self.agent_agent_name,
-            "agent_agent_sys": self.agent_agent_sys,
+            "agent_agent_sys": self.agent_agent_sys_type,
             "agent_uptime": self.agent_uptime,
             "INTERFACES_NUMBER": self.INTERFACES_NUMBER,
             "INTERFACES": self.INTERFACES,
@@ -121,7 +149,7 @@ class SNMPAgent:
             "agent_os_logo": self.agent_os_logo,
             "agent_ports_number": self.agent_ports_number,
             "agent_agent_name": self.agent_agent_name,
-            "agent_agent_sys": self.agent_agent_sys,
+            "agent_agent_sys": self.agent_agent_sys_type,
             "agent_uptime": self.agent_uptime,
             "INTERFACES_NUMBER": self.INTERFACES_NUMBER,
             "INTERFACES": [interface.to_json() for interface in self.INTERFACES]
@@ -131,7 +159,7 @@ class SNMPAgent:
         str_representation = f"Agent ID: {self.agent_id} \n" \
                              f"Agent IP Address: {self.agent_ip_address}\n" \
                              f"Agent IP Address: {self.agent_ip_address}\n" \
-                             f"Agent System: {self.agent_agent_sys}\n" \
+                             f"Agent System: {self.agent_agent_sys_type}\n" \
                              f"Agent System Name: {self.agent_agent_name}\n" \
                              f"Agent System Location: {self.agent_location}\n" \
                              f"Agent Uptime: {self.agent_uptime}" \
@@ -185,7 +213,10 @@ class SNMPUtils:
         agent.snmp_version = self.snmp_query(agent.community_name, agent.agent_ip_address, SNMPObjectId.SYS_SNMP_V)
         agent.agent_name = self.snmp_query(agent.community_name, agent.agent_ip_address, SNMPObjectId.SYS_NAME)
         agent.agent_agent_name = self.snmp_query(agent.community_name, agent.agent_ip_address, SNMPObjectId.SYS_NAME)
-        agent.agent_agent_sys = self.snmp_query(agent.community_name, agent.agent_ip_address, SNMPObjectId.SYS_TYPE)
+        agent.agent_agent_sys_type = self.snmp_query(agent.community_name, agent.agent_ip_address,
+                                                     SNMPObjectId.SYS_TYPE)
+        is_windows = "Windows" in agent.agent_agent_sys_type
+        is_linux = "Linux" in agent.agent_agent_sys_type
         agent.agent_uptime = self.snmp_query(agent.community_name, agent.agent_ip_address, SNMPObjectId.SYS_UPTIME)
         agent.agent_location = self.snmp_query(agent.community_name, agent.agent_ip_address, SNMPObjectId.SYS_LOCATION)
         input_unicast_traffic = int(
@@ -198,9 +229,39 @@ class SNMPUtils:
             self.snmp_query(agent.community_name, agent.agent_ip_address, SNMPObjectId.INPUT_TCP_SEGMENTS_COUNTER))
         input_udp_segments = int(
             self.snmp_query(agent.community_name, agent.agent_ip_address, SNMPObjectId.INPUT_UDP_DATAGRAMS_COUNTER))
-        rrd_value = f"N:{input_unicast_traffic}:{input_ip_traffic}:{output_icmp_echos}:{input_tcp_segments}:{input_udp_segments}"
+        oid_cpu = ""
+        oid_total_disk = ""
+        oid_total_ram = ""
+        oid_used_disk = ""
+        oid_used_ram = ""
+        if is_windows:
+            oid_cpu = SNMPObjectId.PROCESSOR_USAGE_WINBUS
+            oid_total_disk = SNMPObjectId.TOTAL_DISK_WINDOWS
+            oid_total_ram = SNMPObjectId.TOTAL_RAM_MEMORY_WINBUS
+            oid_used_disk = SNMPObjectId.DISK_USAGE_WINDOWS
+            oid_used_ram = SNMPObjectId.USED_RAM_MEMORY_WINBUS
+        if is_linux:
+            oid_cpu = SNMPObjectId.PROCESSOR_USAGE_LINUX
+            oid_total_disk = SNMPObjectId.TOTAL_DISK_LINUX
+            oid_total_ram = SNMPObjectId.TOTAL_RAM_MEMORY_LINUX
+            oid_used_disk = SNMPObjectId.DISK_USAGE_LINUX
+            oid_used_ram = SNMPObjectId.USED_RAM_MEMORY_LINUX
+
+        agent.agent_cpu_usage = int(
+            self.snmp_query(agent.community_name, agent.agent_ip_address, oid_cpu))
+        agent.agent_ram_total = int(
+            self.snmp_query(agent.community_name, agent.agent_ip_address, oid_total_ram))
+        agent.agent_ram_usage = int(
+            self.snmp_query(agent.community_name, agent.agent_ip_address, oid_used_ram))
+        agent.agent_ram_usage_percent = agent.agent_ram_usage / (agent.agent_ram_usage_percent / 100)
+        agent.agent_disk_total = int(
+            self.snmp_query(agent.community_name, agent.agent_ip_address, oid_total_disk))
+        agent.agent_disk_usage = int(
+            self.snmp_query(agent.community_name, agent.agent_ip_address, oid_used_disk))
+        agent.agent_disk_usage_percent = agent.agent_disk_usage / (agent.agent_disk_total / 100)
+        rrd_value = f"N:{input_unicast_traffic}:{input_ip_traffic}:{output_icmp_echos}:{input_tcp_segments}:{input_udp_segments}:{agent.agent_cpu_usage}:{agent.agent_ram_usage_percent}:{agent.agent_disk_usage_percent}"
         rrdtool.update(agent.rdd_file, rrd_value)
-        rrdtool.dump(agent.rdd_file, f"{agent.rdd_file.split('.')[0]}.xml")
+        # rrdtool.dump(agent.rdd_file, f"{agent.rdd_file.split('.')[0]}.xml")
         time.sleep(1)
 
 
@@ -214,6 +275,12 @@ def create_rdd_file(agent_file_name):
                              "DS:outputicmp:COUNTER:600:U:U",
                              "DS:inputtcp:COUNTER:600:U:U",
                              "DS:inputudp:COUNTER:600:U:U",
+                             "DS:cpuusage:GAUGE:600:U:U",
+                             "DS:cpuram:GAUGE:600:U:U",
+                             "DS:cpudisk:GAUGE:600:U:U",
+                             "RRA:AVERAGE:0.5:6:5",
+                             "RRA:AVERAGE:0.5:6:5",
+                             "RRA:AVERAGE:0.5:6:5",
                              "RRA:AVERAGE:0.5:6:5",
                              "RRA:AVERAGE:0.5:6:5",
                              "RRA:AVERAGE:0.5:6:5",
@@ -223,6 +290,40 @@ def create_rdd_file(agent_file_name):
             print(rrdtool.error())
     except Exception as e:
         print(">> ERROR AT RDD FILE CREATION:", e)
+
+
+def calculate_trend(agent_file_name: str):
+    ultima_lectura = int(rrdtool.last(agent_file_name))
+    tiempo_final = ultima_lectura
+    tiempo_inicial = tiempo_final - 2000
+    just_name = agent_file_name.split('.')[0]
+    ret = rrdtool.graph(f"trend_{just_name}.png",
+                        "--start", str(tiempo_inicial),
+                        "--end", str(tiempo_final),
+                        "--vertical-label=Carga CPU",
+                        "--title=Tendencia del uso del CPU",
+                        "--color", "ARROW#009900",
+                        '--vertical-label', "Uso de CPU (%)",
+                        '--lower-limit', '0',
+                        '--upper-limit', '100',
+                        f"DEF:carga={agent_file_name}:CPUload:AVERAGE",
+                        "AREA:carga#00FF00:Carga CPU",
+                        "LINE1:30",
+                        "AREA:5#ff000022:stack",
+                        "VDEF:CPUlast=carga,LAST",
+                        "VDEF:CPUmin=carga,MINIMUM",
+                        "VDEF:CPUavg=carga,AVERAGE",
+                        "VDEF:CPUmax=carga,MAXIMUM",
+                        "COMMENT:Now          Min             Avg             Max",
+                        "GPRINT:CPUlast:%12.0lf%s",
+                        "GPRINT:CPUmin:%10.0lf%s",
+                        "GPRINT:CPUavg:%13.0lf%s",
+                        "GPRINT:CPUmax:%13.0lf%s",
+                        "VDEF:m=carga,LSLSLOPE",
+                        "VDEF:b=carga,LSLINT",
+                        'CDEF:tendencia=carga,POP,m,COUNT,*,b,+',
+                        "LINE2:tendencia#FFBB00")
+
 
 
 class SNMPMonitor:
